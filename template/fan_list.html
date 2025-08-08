@@ -6,15 +6,24 @@
 </head>
 <body>
     <h1>Mensajes de los Fans</h1>
+
     {% if fans %}
         <ul>
         {% for fan in fans %}
-            <li><strong>{{ fan.name }}</strong>: {{ fan.message }}</li>
+            <li>
+                <strong>{{ fan.name }}</strong> ({{ fan.timestamp.strftime('%d/%m/%Y %H:%M') }}):<br>
+                {{ fan.message }}<br>
+                {% if fan.photo %}
+                    <img src="{{ url_for('uploaded_file', filename=fan.photo) }}" alt="Foto de {{ fan.name }}" width="200"><br>
+                {% endif %}
+                <hr>
+            </li>
         {% endfor %}
         </ul>
     {% else %}
         <p>No hay mensajes aún.</p>
     {% endif %}
+
     <a href="/form">Enviar otro mensaje</a>
 </body>
 </html>
