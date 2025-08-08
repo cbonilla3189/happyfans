@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, request, redirect
 from flask_sqlalchemy import SQLAlchemy
 import os
 
@@ -20,6 +20,15 @@ def home():
 @app.route("/form")
 def fan_form():
     return render_template("fan_form.html")
+
+@app.route("/submit", methods=["POST"])
+def submit_fan():
+    name = request.form["name"]
+    message = request.form["message"]
+    new_fan = Fan(name=name, message=message)
+    db.session.add(new_fan)
+    db.session.commit()
+    return redirect("/form")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
