@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Flask, render_template
 from flask_sqlalchemy import SQLAlchemy
 import os
 
@@ -16,6 +16,10 @@ class Fan(db.Model):
 @app.route("/")
 def home():
     return "¡Hola, Carlos! Happy Fans está conectado a la base de datos."
+
+@app.route("/form")
+def fan_form():
+    return render_template("fan_form.html")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
