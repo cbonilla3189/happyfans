@@ -5,7 +5,7 @@ services:
     buildCommand: |
       pip install -r requirements.txt
       python init_db.py
-    startCommand: gunicorn happyfans.app:app --bind 0.0.0.0:$PORT --timeout 120
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
     plan: free
     envVars:
       - key: DATABASE_URL
