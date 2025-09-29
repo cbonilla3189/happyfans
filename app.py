@@ -85,7 +85,7 @@ def health_check():
 
 @app.route("/")
 def home():
-    return render_template("home.html") if os.path.exists(os.path.join('templates','home.html')) else f"¡Hola, {current_user.name if current_user.is_authenticated else 'Cache'}! Happy Fans está conectado a la base de datos."
+    return render_template("home.html") if os.path.exists(os.path.join('template','home.html')) else f"¡Hola, {current_user.name if current_user.is_authenticated else 'Cache'}! Happy Fans está conectado a la base de datos."
 
 # Registro
 @app.route('/register', methods=['GET', 'POST'])
