@@ -1,50 +1,76 @@
-from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, flash, url_for
+import os
+import traceback
+from datetime import datetime
+from flask import (
+    Flask, render_template, request, redirect, send_from_directory,
+    jsonify, abort, flash, url_for
+)
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_login import LoginManager, login_user, login_required, current_user, logout_user, UserMixin
-from forms import RegisterForm, LoginForm
-import os
-from datetime import datetime
 
-# Configuración básica
-app = Flask(__name__)
+# Inicialización de app
+# Nota: tu carpeta de plantillas actual se llama "template" (singular).
+# Si la renombraste a "template", cambia el valor a 'template'.
+app = Flask(__name__, template_folder='template')
 
-# SECRET_KEY (usar variable de entorno en producción)
+# Configs básicas
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'cambia_esta_clave_en_produccion'
-
-# Configurar la URI de la base de datos con fallback a SQLite local
 db_url = os.environ.get('DATABASE_URL') or f"sqlite:///{os.path.join(os.getcwd(), 'happyfans.db')}"
 app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Configuración de subida de archivos
+# Uploads
 UPLOAD_FOLDER = os.path.join('static', 'uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB
-
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
-# Inicializar extensiones
+# Extensiones
 db = SQLAlchemy(app)
-login_manager = LoginManager(app)
-login_manager.login_view = 'login'
-login_manager.login_message_category = 'info'
+
+# Intento de importar forms (optional). Si falta, las rutas de auth devolverán instrucciones.
+FORMS_AVAILABLE = True
+try:
+    from flask_login import (
+        LoginManager, login_user, login_required, current_user, logout_user, UserMixin
+    )
+    from forms import RegisterForm, LoginForm
+except Exception as e:
+    FORMS_AVAILABLE = False
+    # Import fallback names to avoid NameError later
+    LoginManager = None
+    login_user = login_required = current_user = logout_user = UserMixin = None
+    RegisterForm = LoginForm = None
+    app.logger.warning(f"forms.py o Flask-Login no disponibles: {e}")
+
+# Configurar Flask-Login si está disponible
+if FORMS_AVAILABLE:
+    login_manager = LoginManager(app)
+    login_manager.login_view = 'login'
+    login_manager.login_message_category = 'info'
 
 # Modelos
-class User(UserMixin, db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(150), unique=True, nullable=False)
-    password_hash = db.Column(db.String(256), nullable=False)
-    name = db.Column(db.String(100), nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+if FORMS_AVAILABLE:
+    class User(UserMixin, db.Model):
+        id = db.Column(db.Integer, primary_key=True)
+        email = db.Column(db.String(150), unique=True, nullable=False)
+        password_hash = db.Column(db.String(256), nullable=False)
+        name = db.Column(db.String(100), nullable=True)
+        created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
+        def set_password(self, password):
+            self.password_hash = generate_password_hash(password)
 
-    def check_password(self, password):
-        return check_password_hash(self.password_hash, password)
+        def check_password(self, password):
+            return check_password_hash(self.password_hash, password)
+else:
+    # Definir un modelo mínimo si Flask-Login no está instalado no es útil,
+    # pero definimos un placeholder para evitar ReferencedBeforeAssignment
+    class User(db.Model):
+        __tablename__ = 'user'
+        id = db.Column(db.Integer, primary_key=True)
 
 class Fan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -54,7 +80,7 @@ class Fan(db.Model):
     photo = db.Column(db.String(200), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
-# Crear tablas de forma idempotente durante la importación
+# Crear tablas de forma idempotente durante import
 try:
     db_url_check = app.config.get('SQLALCHEMY_DATABASE_URI')
     if db_url_check:
@@ -67,12 +93,13 @@ except Exception as e:
     app.logger.error(f"Error al inicializar la base de datos en import: {e}")
 
 # Loader para Flask-Login
-@login_manager.user_loader
-def load_user(user_id):
-    try:
-        return User.query.get(int(user_id))
-    except Exception:
-        return None
+if FORMS_AVAILABLE:
+    @login_manager.user_loader
+    def load_user(user_id):
+        try:
+            return User.query.get(int(user_id))
+        except Exception:
+            return None
 
 # Utilidades
 def allowed_file(filename):
@@ -85,13 +112,28 @@ def health_check():
 
 @app.route("/")
 def home():
-    return render_template("home.html") if os.path.exists(os.path.join('template','home.html')) else f"¡Hola, {current_user.name if current_user.is_authenticated else 'Cache'}! Happy Fans está conectado a la base de datos."
+    # Intentamos renderizar home; si hay problemas se usa un fallback visible
+    try:
+        return render_template("home.html")
+    except Exception as e:
+        app.logger.error("Error renderizando home.html: %s", e)
+        # Mostrar información de depuración mínima en producción no es recomendable;
+        # aquí devolvemos el fallback para que veas que la app corre.
+        return f"¡Hola, {getattr(current_user, 'name', 'Cache')}! Happy Fans está conectado a la base de datos."
 
-# Registro
+# Registro de usuario
 @app.route('/register', methods=['GET', 'POST'])
 def register():
+    if FORMS_AVAILABLE is False:
+        return (
+            "Registro deshabilitado: falta forms.py o Flask-Login. "
+            "Crea forms.py con RegisterForm y agrega Flask-Login/Flask-WTF a requirements.",
+            500
+        )
+
     if current_user.is_authenticated:
         return redirect(url_for('home'))
+
     form = RegisterForm()
     if form.validate_on_submit():
         existing = User.query.filter_by(email=form.email.data.lower()).first()
@@ -114,8 +156,16 @@ def register():
 # Login
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    if FORMS_AVAILABLE is False:
+        return (
+            "Login deshabilitado: falta forms.py o Flask-Login. "
+            "Crea forms.py con LoginForm y agrega Flask-Login/Flask-WTF a requirements.",
+            500
+        )
+
     if current_user.is_authenticated:
         return redirect(url_for('home'))
+
     form = LoginForm()
     if form.validate_on_submit():
         u = User.query.filter_by(email=form.email.data.lower()).first()
@@ -129,22 +179,29 @@ def login():
 
 # Logout
 @app.route('/logout')
-@login_required
 def logout():
+    if FORMS_AVAILABLE is False:
+        return redirect(url_for('home'))
+    if not current_user.is_authenticated:
+        return redirect(url_for('home'))
     logout_user()
     flash('Sesión cerrada.', 'success')
     return redirect(url_for('home'))
 
-# Mostrar formulario (restringido a usuarios autenticados)
+# Mostrar formulario (puedes proteger con login_required si quieres)
 @app.route("/form")
-@login_required
 def fan_form():
-    return render_template("fan_form.html")
+    # Si deseas que solo usuarios autenticados envíen, añade @login_required arriba
+    try:
+        return render_template("fan_form.html")
+    except Exception as e:
+        app.logger.error("Error renderizando fan_form.html: %s", e)
+        abort(500, description="No se pudo renderizar el formulario. Revisa template y logs.")
 
 # Procesar formulario con validación y manejo seguro de archivos
 @app.route("/submit", methods=["POST"])
-@login_required
 def submit_fan():
+    # Si quieres exigir autenticación, añade login_required y usa current_user.id
     name = (request.form.get("name") or "").strip()
     message = (request.form.get("message") or "").strip()
 
@@ -165,7 +222,14 @@ def submit_fan():
             app.logger.error(f"Error guardando archivo: {e}")
             abort(500, description="Error al guardar la imagen.")
 
-    new_fan = Fan(name=name, message=message, photo=filename, user_id=current_user.id if current_user.is_authenticated else None)
+    user_id = None
+    if FORMS_AVAILABLE and current_user.is_authenticated:
+        try:
+            user_id = current_user.id
+        except Exception:
+            user_id = None
+
+    new_fan = Fan(name=name, message=message, photo=filename, user_id=user_id)
     try:
         db.session.add(new_fan)
         db.session.commit()
@@ -176,24 +240,51 @@ def submit_fan():
 
     return redirect("/form")
 
-# Mostrar lista de fans ordenados por fecha (pública)
+# Lista de fans
 @app.route("/fans")
 def show_fans():
     fans = Fan.query.order_by(Fan.timestamp.desc()).all()
-    return render_template("fan_list.html", fans=fans)
+    try:
+        return render_template("fan_list.html", fans=fans)
+    except Exception as e:
+        app.logger.error("Error renderizando fan_list.html: %s", e)
+        # Fallback simple
+        out = []
+        for f in fans:
+            out.append({"name": f.name, "message": f.message, "timestamp": f.timestamp.isoformat()})
+        return jsonify(out), 200
 
 # Servir archivos subidos
 @app.route("/uploads/<path:filename>")
 def uploaded_file(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
-# Manejo de errores simples
+# Endpoint debug: lista de template y traceback de render de home
+@app.route("/_debug/list_template_verbose")
+def debug_list_template_verbose():
+    base = os.getcwd()
+    found = []
+    for root, _, filenames in os.walk(base):
+        for f in filenames:
+            if f.endswith('.html'):
+                found.append(os.path.relpath(os.path.join(root, f), base))
+
+    result = {"cwd": base, "template_found": found}
+    try:
+        _ = render_template("home.html")
+    except Exception as e:
+        result["render_error"] = str(e)
+        result["traceback"] = traceback.format_exc()
+    return result, 200
+
+# Manejo de errores
 @app.errorhandler(400)
 def bad_request(e):
-    return jsonify(error=str(e.description)), 400
+    return jsonify(error=str(getattr(e, 'description', str(e)))), 400
 
 @app.errorhandler(500)
 def server_error(e):
+    # En despliegue no muestres traceback; aquí devolvemos mensaje simple
     return jsonify(error="Error interno del servidor"), 500
 
 # Ejecutar localmente
