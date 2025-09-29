@@ -3,9 +3,7 @@ services:
     name: flask-app
     env: python3
     buildCommand: pip install -r requirements.txt
-    startCommand: |
-      python scripts/init_db.py
-      gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120
     plan: free
     envVars:
       - key: DATABASE_URL
