@@ -1,25 +1,132 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Happy Fans - Enviar mensaje</title>
+  <meta charset="UTF-8">
+  <title>Happy Fans - Enviar mensaje</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    body { font-family: Arial, sans-serif; max-width:760px; margin:32px auto; padding:0 16px; }
+    label { font-weight:600; }
+    .error { color: #b00020; margin-top:8px; }
+    .success { color: #0a7a07; margin-top:8px; }
+    .field { margin-bottom:14px; }
+    #formError { display:none; }
+  </style>
 </head>
 <body>
-    <h1>¡Bienvenido a Happy Fans!</h1>
-    <form action="/submit" method="POST" enctype="multipart/form-data">
-        <label for="name">Nombre:</label><br>
-        <input type="text" id="name" name="name" required><br><br>
+  <h1>¡Bienvenido a Happy Fans!</h1>
 
-        <label for="message">Mensaje:</label><br>
-        <textarea id="message" name="message" rows="4" cols="50" required></textarea><br><br>
+  <form id="fanForm" action="/submit" method="POST" enctype="multipart/form-data" novalidate>
+    <div class="field">
+      <label for="name">Nombre:</label><br>
+      <input type="text" id="name" name="name" maxlength="100" required>
+    </div>
 
-        <label for="photo">Sube tu foto:</label><br>
-        <input type="file" id="photo" name="photo"><br><br>
+    <div class="field">
+      <label for="message">Mensaje:</label><br>
+      <textarea id="message" name="message" rows="4" cols="50" maxlength="200" required></textarea>
+    </div>
 
-        <button type="submit">Enviar</button>
-    </form>
+    <div class="field">
+      <label for="photo">Sube tu foto (opcional):</label><br>
+      <input type="file" id="photo" name="photo" accept="image/png,image/jpeg,image/jpg,image/gif">
+      <div style="font-size:0.9em;color:#555;margin-top:6px;">Tipos permitidos: png, jpg, jpeg, gif. Máx 5 MB.</div>
+    </div>
 
-    <br>
-    <a href="/fans">Ver mensajes de otros fans</a>
+    <button type="submit">Enviar</button>
+
+    <div id="formError" class="error" role="alert" aria-live="polite"></div>
+    <div id="formSuccess" class="success" role="status" aria-live="polite" style="display:none;"></div>
+  </form>
+
+  <br>
+  <a href="/fans">Ver mensajes de otros fans</a>
+
+  <script>
+    (function () {
+      const form = document.getElementById('fanForm');
+      const errorBox = document.getElementById('formError');
+      const successBox = document.getElementById('formSuccess');
+      const MAX_BYTES = 5 * 1024 * 1024;
+      const ALLOWED_TYPES = ['image/png','image/jpeg','image/jpg','image/gif'];
+
+      function showError(msg) {
+        errorBox.textContent = msg;
+        errorBox.style.display = 'block';
+        successBox.style.display = 'none';
+      }
+      function clearError() {
+        errorBox.textContent = '';
+        errorBox.style.display = 'none';
+      }
+      function showSuccess(msg) {
+        successBox.textContent = msg;
+        successBox.style.display = 'block';
+        errorBox.style.display = 'none';
+      }
+
+      form.addEventListener('submit', function (e) {
+        clearError();
+        const name = (document.getElementById('name').value || '').trim();
+        const message = (document.getElementById('message').value || '').trim();
+        const photoInput = document.getElementById('photo');
+        const file = photoInput.files && photoInput.files[0];
+
+        if (!name) {
+          e.preventDefault();
+          showError('El nombre es obligatorio.');
+          document.getElementById('name').focus();
+          return;
+        }
+        if (name.length > 100) {
+          e.preventDefault();
+          showError('El nombre no puede superar 100 caracteres.');
+          return;
+        }
+        if (!message) {
+          e.preventDefault();
+          showError('El mensaje es obligatorio.');
+          document.getElementById('message').focus();
+          return;
+        }
+        if (message.length > 200) {
+          e.preventDefault();
+          showError('El mensaje no puede superar 200 caracteres.');
+          return;
+        }
+        if (file) {
+          if (!ALLOWED_TYPES.includes(file.type)) {
+            e.preventDefault();
+            showError('Tipo de archivo no permitido. Usa png, jpg o gif.');
+            return;
+          }
+          if (file.size > MAX_BYTES) {
+            e.preventDefault();
+            showError('La imagen no puede exceder 5 MB.');
+            return;
+          }
+        }
+        // Optional: show a quick success message while submitting
+        showSuccess('Enviando... por favor espera.');
+        // allow submit to proceed
+      });
+
+      // Optional: client-side filename sanitization preview (not required)
+      document.getElementById('photo').addEventListener('change', function () {
+        clearError();
+        const f = this.files[0];
+        if (!f) return;
+        if (!ALLOWED_TYPES.includes(f.type)) {
+          showError('Tipo de archivo no permitido.');
+          this.value = '';
+          return;
+        }
+        if (f.size > MAX_BYTES) {
+          showError('La imagen no puede exceder 5 MB.');
+          this.value = '';
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
