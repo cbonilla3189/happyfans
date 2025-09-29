@@ -1,12 +1,21 @@
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 import os
+import sys
+import time
+
+# Esperar unos segundos para asegurar que la base de datos esté lista
+time.sleep(5)
+
+# Verificar que DATABASE_URL esté disponible
+db_url = os.environ.get('DATABASE_URL')
+if not db_url:
+    print("❌ DATABASE_URL no está definida. Render aún no la ha inyectado.")
+    sys.exit(1)
 
 # Crear instancia de la aplicación Flask
 app = Flask(__name__)
-
-# Configurar la URI de la base de datos desde la variable de entorno
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_DATABASE_URI'] = db_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Inicializar SQLAlchemy
@@ -19,6 +28,10 @@ class Fan(db.Model):
     message = db.Column(db.String(200), nullable=False)
 
 # Crear las tablas en la base de datos
-with app.app_context():
-    db.create_all()
-    print("✅ Base de datos inicializada correctamente con la tabla 'Fan'.")
+try:
+    with app.app_context():
+        db.create_all()
+        print("✅ Base de datos inicializada correctamente con la tabla 'Fan'.")
+except Exception as e:
+    print(f"❌ Error al inicializar la base de datos: {e}")
+    sys.exit(1)
