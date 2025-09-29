@@ -1,11 +1,17 @@
-from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort
+from flask import Flask, render_template, request, redirect, send_from_directory, jsonify, abort, flash, url_for
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.utils import secure_filename
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_login import LoginManager, login_user, login_required, current_user, logout_user, UserMixin
+from forms import RegisterForm, LoginForm
 import os
 from datetime import datetime
 
 # Configuración básica
 app = Flask(__name__)
+
+# SECRET_KEY (usar variable de entorno en producción)
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY') or 'cambia_esta_clave_en_produccion'
 
 # Configurar la URI de la base de datos con fallback a SQLite local
 db_url = os.environ.get('DATABASE_URL') or f"sqlite:///{os.path.join(os.getcwd(), 'happyfans.db')}"
@@ -20,18 +26,35 @@ app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 
-# Inicializar base de datos
+# Inicializar extensiones
 db = SQLAlchemy(app)
+login_manager = LoginManager(app)
+login_manager.login_view = 'login'
+login_manager.login_message_category = 'info'
 
-# Modelo Fan
+# Modelos
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(150), unique=True, nullable=False)
+    password_hash = db.Column(db.String(256), nullable=False)
+    name = db.Column(db.String(100), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
 class Fan(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     message = db.Column(db.String(200), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     photo = db.Column(db.String(200), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
 
-# Inicializar tablas de forma idempotente durante la importación
+# Crear tablas de forma idempotente durante la importación
 try:
     db_url_check = app.config.get('SQLALCHEMY_DATABASE_URI')
     if db_url_check:
@@ -43,6 +66,18 @@ try:
 except Exception as e:
     app.logger.error(f"Error al inicializar la base de datos en import: {e}")
 
+# Loader para Flask-Login
+@login_manager.user_loader
+def load_user(user_id):
+    try:
+        return User.query.get(int(user_id))
+    except Exception:
+        return None
+
+# Utilidades
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 # Rutas de utilidad
 @app.route("/health")
 def health_check():
@@ -50,19 +85,65 @@ def health_check():
 
 @app.route("/")
 def home():
-    return "¡Hola, Carlos! Happy Fans está conectado a la base de datos."
+    return render_template("home.html") if os.path.exists(os.path.join('templates','home.html')) else f"¡Hola, {current_user.name if current_user.is_authenticated else 'Cache'}! Happy Fans está conectado a la base de datos."
 
-# Validadores de archivos
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# Registro
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    form = RegisterForm()
+    if form.validate_on_submit():
+        existing = User.query.filter_by(email=form.email.data.lower()).first()
+        if existing:
+            flash('Ese correo ya está registrado.', 'error')
+            return render_template('register.html', form=form)
+        u = User(email=form.email.data.lower(), name=form.name.data)
+        u.set_password(form.password.data)
+        try:
+            db.session.add(u)
+            db.session.commit()
+            flash('Cuenta creada. Ya puedes iniciar sesión.', 'success')
+            return redirect(url_for('login'))
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Error creando usuario: {e}")
+            flash('Error creando cuenta.', 'error')
+    return render_template('register.html', form=form)
 
-# Mostrar formulario
+# Login
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    form = LoginForm()
+    if form.validate_on_submit():
+        u = User.query.filter_by(email=form.email.data.lower()).first()
+        if u and u.check_password(form.password.data):
+            login_user(u)
+            flash('Bienvenido.', 'success')
+            next_page = request.args.get('next')
+            return redirect(next_page or url_for('home'))
+        flash('Email o contraseña incorrectos.', 'error')
+    return render_template('login.html', form=form)
+
+# Logout
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('Sesión cerrada.', 'success')
+    return redirect(url_for('home'))
+
+# Mostrar formulario (restringido a usuarios autenticados)
 @app.route("/form")
+@login_required
 def fan_form():
     return render_template("fan_form.html")
 
 # Procesar formulario con validación y manejo seguro de archivos
 @app.route("/submit", methods=["POST"])
+@login_required
 def submit_fan():
     name = (request.form.get("name") or "").strip()
     message = (request.form.get("message") or "").strip()
@@ -84,7 +165,7 @@ def submit_fan():
             app.logger.error(f"Error guardando archivo: {e}")
             abort(500, description="Error al guardar la imagen.")
 
-    new_fan = Fan(name=name, message=message, photo=filename)
+    new_fan = Fan(name=name, message=message, photo=filename, user_id=current_user.id if current_user.is_authenticated else None)
     try:
         db.session.add(new_fan)
         db.session.commit()
@@ -95,7 +176,7 @@ def submit_fan():
 
     return redirect("/form")
 
-# Mostrar lista de fans ordenados por fecha
+# Mostrar lista de fans ordenados por fecha (pública)
 @app.route("/fans")
 def show_fans():
     fans = Fan.query.order_by(Fan.timestamp.desc()).all()
