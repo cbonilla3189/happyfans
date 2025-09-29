@@ -1,7 +1,7 @@
 services:
   - type: web
     name: flask-app
-    env: python
+    env: python3
     buildCommand: |
       pip install -r requirements.txt
       python init_db.py
