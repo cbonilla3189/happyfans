@@ -5,7 +5,7 @@ import sys
 import time
 
 # Esperar unos segundos para asegurar que la base de datos esté lista
-time.sleep(5)
+time.sleep(55)
 
 # Verificar que DATABASE_URL esté disponible
 db_url = os.environ.get('DATABASE_URL')
