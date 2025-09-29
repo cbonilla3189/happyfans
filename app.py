@@ -6,7 +6,7 @@ from datetime import datetime
 
 # Configuración de la aplicación
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///happyfans.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Carpeta para guardar fotos subidas
