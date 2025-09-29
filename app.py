@@ -32,7 +32,7 @@ class Fan(db.Model):
     photo = db.Column(db.String(200), nullable=True)
 
 # Inicializar tablas de forma idempotente al primer request
-@app.before_first_request
+@app.before_serving
 def initialize_database():
     try:
         db.create_all()
