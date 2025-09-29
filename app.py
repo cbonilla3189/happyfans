@@ -31,14 +31,17 @@ class Fan(db.Model):
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     photo = db.Column(db.String(200), nullable=True)
 
-# Inicializar tablas de forma idempotente al primer request
-@app.before_serving
-def initialize_database():
-    try:
-        db.create_all()
-        app.logger.info("Base de datos inicializada correctamente.")
-    except Exception as e:
-        app.logger.error(f"Error al inicializar la base de datos: {e}")
+# Inicializar tablas de forma idempotente durante la importación
+try:
+    db_url_check = app.config.get('SQLALCHEMY_DATABASE_URI')
+    if db_url_check:
+        with app.app_context():
+            db.create_all()
+            app.logger.info("Base de datos inicializada correctamente (import-time).")
+    else:
+        app.logger.warning("DATABASE_URL no presente en import; la BD se creará al primer request.")
+except Exception as e:
+    app.logger.error(f"Error al inicializar la base de datos en import: {e}")
 
 # Rutas de utilidad
 @app.route("/health")
@@ -75,7 +78,11 @@ def submit_fan():
             abort(400, description="Tipo de archivo no permitido.")
         filename = secure_filename(photo_file.filename)
         file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        photo_file.save(file_path)
+        try:
+            photo_file.save(file_path)
+        except Exception as e:
+            app.logger.error(f"Error guardando archivo: {e}")
+            abort(500, description="Error al guardar la imagen.")
 
     new_fan = Fan(name=name, message=message, photo=filename)
     try:
