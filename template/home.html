@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Happy Fans</title>
+</head>
+<body>
+  <header>
+    <h1>Happy Fans</h1>
+    <nav>
+      {% if current_user.is_authenticated %}
+        <span>Hola, {{ current_user.name or current_user.email }}</span>
+        <a href="{{ url_for('logout') }}">Cerrar sesión</a>
+        <a href="{{ url_for('fan_form') }}">Enviar mensaje</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">Iniciar sesión</a>
+        <a href="{{ url_for('register') }}">Registrarse</a>
+        <a href="{{ url_for('show_fans') }}">Ver mensajes</a>
+      {% endif %}
+    </nav>
+    <hr>
+  </header>
+
+  <main>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for cat, msg in messages %}
+          <div class="{{ cat }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <p>Estado: <strong>Conectado a la base de datos</strong></p>
+    <p>Usa los enlaces del menú para iniciar sesión, registrarte o ver mensajes.</p>
+  </main>
+</body>
+</html>
