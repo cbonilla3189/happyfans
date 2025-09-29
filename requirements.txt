@@ -3,3 +3,6 @@ gunicorn
 psycopg2-binary
 Flask-SQLAlchemy
 Werkzeug
+Flask-Login
+Flask-WTF
+WTForms
