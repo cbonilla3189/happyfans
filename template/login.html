@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Login - Happy Fans</title>
+</head>
+<body>
+  <h1>Iniciar sesión</h1>
+  <form method="post" action="{{ url_for('login') }}">
+    {{ form.csrf_token }}
+    <div>
+      {{ form.email.label }}<br>
+      {{ form.email(size=40) }}
+      {% for err in form.email.errors %}<div style="color:red">{{ err }}</div>{% endfor %}
+    </div>
+    <div>
+      {{ form.password.label }}<br>
+      {{ form.password(size=40) }}
+      {% for err in form.password.errors %}<div style="color:red">{{ err }}</div>{% endfor %}
+    </div>
+    <div>{{ form.submit() }}</div>
+  </form>
+  <p>¿No tienes cuenta? <a href="{{ url_for('register') }}">Regístrate</a></p>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for cat, msg in messages %}
+        <div class="{{ cat }}">{{ msg }}</div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+</body>
+</html>
