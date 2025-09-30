@@ -27,7 +27,6 @@
           {% else %}
             <li class="nav-item"><a class="nav-link" href="{{ url_for('login') }}">Iniciar sesión</a></li>
             <li class="nav-item"><a class="nav-link" href="{{ url_for('register') }}">Registrarse</a></li>
-            <li class="nav-item"><a class="nav-link" href="{{ url_for('show_fans') }}">Ver mensajes</a></li>
           {% endif %}
         </ul>
       </div>
@@ -47,7 +46,6 @@
             <a class="btn btn-outline-secondary btn-lg" href="{{ url_for('login') }}">Iniciar sesión</a>
           {% endif %}
         </p>
-        <p class="mt-3"><strong>Estado:</strong> <span class="text-success">Conectado a la base de datos</span></p>
       </div>
 
       <div style="max-width:420px;">
